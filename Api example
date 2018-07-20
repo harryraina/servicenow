@@ -49,7 +49,6 @@
 													var myError = new sn_ws_err.ServiceError();
 													myError.setStatus(400);
 													myError.setMessage('Fields mandatory');
-													//myError.setDetail('Here are the details about this error');
 													return myError;
 												}
 										}
