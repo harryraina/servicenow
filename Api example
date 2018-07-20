@@ -1,0 +1,101 @@
+(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+
+    var requestBody=request.body;
+	var requestData=requestBody.data;
+	var writer=response.getStreamWriter();
+	var responseObj={};
+	var hdrs={};
+	try
+		{
+			hdrs['Content-Type']='application/json';
+			hdrs['Accept']='application/json';
+			for(var i=0;i<requestData.length;i++)
+				{
+					var cc=new companycustomer();
+					var com=requestData[i]['company'];
+					var companyexists=cc.existingcompany(com);
+					if(companyexists!=false)
+						{
+							for(var j=0;j<requestData[i]['employees'].length;j++)
+								{
+									var cid=requestData[i]['employees'][j]['customerID'];
+									var customerexists=cc.existingcustomer(cid);
+									if(customerexists==true)
+										{
+											response.setStatus(409);
+											response.setHeaders(hdrs);
+											responseObj.message='This account already exists. CustomerId is:'+cid;
+											writer.writeString(global.JSON.stringify(responseObj));
+										}
+									else
+										{ 
+											var name=requestData[i]['employees'][j]['customerName'];
+											var street=requestData[i]['employees'][j]['street'];
+											var phone=requestData[i]['employees'][j]['phone'];
+											var city=requestData[i]['employees'][j]['city'];
+											var zip=requestData[i]['employees'][j]['zip'];
+											var customer=requestData[i]['employees'][j]['customer'];
+											var sysid=cc.newcustomer(name,street,phone,city,zip,customer,cid,companyexists);
+											if(sysid!=null)
+												{
+													response.setStatus(201);
+													response.setHeaders(hdrs);
+													responseObj.status='201';	
+													responseObj.message='Success! An account has been created. Customer Id is:'+cid+'. Sys ID is :'+sysid;
+													writer.writeString(global.JSON.stringify(responseObj));
+												}
+											else
+												{
+													var myError = new sn_ws_err.ServiceError();
+													myError.setStatus(400);
+													myError.setMessage('Fields mandatory');
+													//myError.setDetail('Here are the details about this error');
+													return myError;
+												}
+										}
+								}
+						}
+					else
+						{
+							var comsysid=cc.newcompany(com);
+							response.setStatus(201);
+							response.setHeaders(hdrs);
+							responseObj.status='201';
+							responseObj.message='Success! A company account has been created. Sys Id is :'+comsysid;
+							writer.writeString(global.JSON.stringify(responseObj));
+							for(var k=0;k<requestData[i]['employees'].length;k++)
+								{
+									var _name=requestData[i]['employees'][k]['customerName'];
+									var _street=requestData[i]['employees'][k]['street'];
+									var _phone=requestData[i]['employees'][k]['phone'];
+									var _city=requestData[i]['employees'][k]['city'];
+									var _zip=requestData[i]['employees'][k]['zip'];
+									var _customer=requestData[i]['employees'][k]['customer'];
+									var _cid=requestData[i]['employees'][k]['customerID'];
+									var _sysid=cc.newcustomer(_name,_street,_phone,_city,_zip,_customer,_cid,comsysid);
+									if(_sysid!=null)
+										{
+											response.setStatus(201);
+											response.setHeaders(hdrs);
+											responseObj.status='201';	
+											responseObj.message='Success! An account has been created. Customer Id is:'+_cid+'. Sys ID is :'+_sysid;
+											writer.writeString(global.JSON.stringify(responseObj));
+										}
+									else
+										{
+											var customError = new sn_ws_err.ServiceError();
+											customError.setStatus(400);
+											customError.setMessage('Fields mandatory');
+											//customError.setDetail('Here are the details about this error');
+											return customError;
+										}
+								}
+							
+						}
+				}
+		}
+	catch(e){
+		return new sn_ws_err.ConflictError(e);
+	}
+
+})(request, response);
