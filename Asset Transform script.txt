@@ -1,0 +1,460 @@
+(function runTransformScript(source, map, log, target /*undefined onStart*/ ) {
+
+ignore=true;
+var locsys;
+var comsys;
+var table;
+var manf;
+var model;
+var modelcat;
+var modelC;
+	
+var quantity=source.u_invoiced_quantity;
+var assettag=source.u_asset_tag.toString().trim();
+var sn= source.u_serial_number.toString().trim();
+	
+//    Get Model category
+		var it=source.u_item_type.trim();
+		var ic=source.u_item_class.trim();
+		if(ic == "Notebook Accessories")
+			{
+				modelcat=ic;
+			}
+		else
+			{
+				modelcat=it;
+			}
+		
+		switch(modelcat){
+			
+			case "Accessories":
+			modelC = "Consumable";
+			break;
+				
+			case "Cables":
+			modelC = "Consumable";
+			break;
+			
+			case "CDW Internal Use / Service Pts":
+			modelC = "Service Parts";
+			break;
+				
+			case "Data Storage/Drives":
+			modelC = "Storage";
+			break;
+				
+			case "Desktop Computers":
+			modelC = "Computer";
+			break;
+				
+			case "Enterprise Storage":
+			modelC = "Storage";
+			break;
+			
+			case "Memory/System Components":
+			modelC = "Memory and System Component";
+			break;
+				
+			case "Notebook/Mobile Devices":
+			modelC = "Computer";
+			break;
+				
+			case "Point of Sale/Data Capture":
+			modelC = "POS and Data Capture";
+			break;
+				
+			case "Power, Cooling & Racks":
+			modelC = "Power, Cooling and Racks";
+			break;
+			
+			case "Printing & Document Scanning":
+			modelC = "Printing/Document Scanning";
+			break;
+				
+			case "Services (CDW Delivered)":
+			modelC = "Service";
+			break;
+				
+			case "Services (Partner Delivered)":
+			modelC = "Service";
+			break;
+				
+			case "Software":
+			modelC = "Softwares";
+			break;
+				
+			case "Video & Audio":
+			modelC = "Video/Audio";
+			break;
+				
+			case "Carts and Furniture":
+			modelC = "Cart and Furniture";
+			break;
+				
+			case "Collaboration Hardware":
+			modelC = "Collaboration Hardware";
+			break;
+				
+			case "NetComm Products":
+			modelC = "NetComm Product";
+			break;
+				
+			case "Servers & Server Management":
+			modelC = "Server Management";
+			break;
+				
+			case "Video-Projection-Pro Audio":
+			modelC = "Video/Audio";
+			break;
+				
+			case "Notebook Accessories":
+			modelC = "Desktop/PC/Notebook Accessory";
+			break;
+				
+			default:
+			modelC = "Other";
+				
+		}
+
+		// End of Model Category
+
+
+		//  Get the asset table
+
+		switch(modelC){
+
+			case "Consumable":
+			table="alm_consumable";
+			break;
+
+			case "Storage":
+			table="u_alm_storage";
+			break;
+
+			case "Server Management":
+			table="u_alm_server_management";
+			break;
+
+			case "Memory and System Component":
+			table="u_alm_memory_system_components";
+			break;
+
+			case "POS and Data Capture":
+			table="u_alm_printer_and_accessories";		
+			break;
+
+			case "Computer":
+			table="alm_hardware";		
+			break;
+
+			case "Printing/Document Scanning":
+			table="u_alm_printer_and_accessories";		
+			break;
+
+			case "Service":
+			table="u_alm_service";		
+			break;
+
+			case "Softwares":
+			table="u_alm_software";		
+			break;
+
+			case "Video/Audio":
+			table="u_alm_video_audio";		
+			break;
+
+			case "Collaboration Hardware":
+			table="u_alm_collaboration_hardware";		
+			break;
+
+			case "NetComm Product":
+			table="u_alm_netcomm";		
+			break;
+
+			case "Desktop/PC/Notebook Accessory":
+			table="u_alm_accessory";
+			break;
+
+			default:table="u_alm_other";
+		}
+
+		// Asset table End
+
+
+		//Get the Model
+
+		var manufacturer=source.u_manufacturer;
+		if(manufacturer)
+		{
+				var mf = new GlideRecord("core_company");
+				mf.addNotNullQuery("name");
+				mf.addQuery("name",manufacturer);
+				mf.query();
+				if (mf.next()) {
+					manf=mf.sys_id;  
+				}
+				else
+				{
+					mf.initialize();
+					mf.name=manufacturer;
+					mf.manufacturer=true;
+					manf=mf.insert();
+				}
+		}
+
+		var model1=source.u_item_description;
+		if(model1)
+			{
+				var mod = new GlideRecord("cmdb_model");
+				mod.addNotNullQuery("name");
+				mod.addQuery("name",model1);
+				mod.query();
+				if (mod.next()) {
+				   model=mod.sys_id;
+				}
+				else
+				{
+					mod.initialize();
+					mod.name=model1;
+					mod.manufacturer=manf;
+					mod.setDisplayValue('cmdb_model_category',modelC);
+					model=mod.insert();
+				}
+			}
+
+		// End of model
+
+
+		//Location entry
+
+		var loc=source.u_ship_to_address_1+', '+source.u_ship_to_city+', '+source.u_ship_to_state;
+		if(loc)
+			{
+				var gr=new GlideRecord("cmn_location");
+				gr.addNotNullQuery("name");
+				gr.addQuery('name',loc);
+				gr.query();
+				if(gr.next())
+				{
+					locsys=gr.sys_id;
+				}
+				else
+					{
+					gr.initialize();
+					gr.setValue('street',source.u_ship_to_address_1);
+					gr.setValue('city',source.u_ship_to_city);
+					gr.setValue('state',source.u_ship_to_state);
+					gr.setValue('zip',source.u_ship_to_postal_code);
+					gr.setValue('name',loc);
+					locsys=gr.insert();
+				}
+			}
+
+
+		//End of location entry
+
+
+		//Get the company
+
+		var com=source.u_ship_to_customer.toString();
+		var company = com.trim();
+		var shipping;
+
+		switch(company)
+		{
+			case "BOOK FAIRS":
+			shipping = "Scholastic Book Fairs, Inc.";
+			break;
+
+			case "SCHOLASTIC BOOK FAIRS" :
+			shipping = "Scholastic Book Fairs, Inc.";
+			break;
+
+			case "SCHOLASTIC":
+			shipping = "Scholastic";
+			break;
+
+			case "SCHOLASTIC  INC":
+			shipping = "Scholastic Inc";
+			break;
+
+			case "SCHOLASTIC  INC.":
+			shipping = "Scholastic Inc.";
+			break;
+
+			case "SCHOLASTIC,INC.":
+			shipping = "Scholastic Inc.";
+			break;
+
+			case "SCHOLASTIC INC.":
+			shipping = "Scholastic Inc.";
+			break;
+
+			case "SCHOLASTIC INC":
+			shipping = "Scholastic Inc";
+			break;
+
+			case "NY BF: SCHOLASTIC BOOK FAIRS":
+			shipping = "Scholastic Book Fairs, Inc.";
+			break;
+
+			case "TN BF: SCHOLASTIC BOOK FAIRS":
+			shipping = "Scholastic Book Fairs, Inc.";
+			break;
+
+			case "MO BF: SCHOLASTIC BOOK FAIRS":
+			shipping = "Scholastic Book Fairs, Inc.";
+			break;
+
+			case "SCHOLASTIC,INC. - KLUTZ":
+			shipping = "Scholastic Inc.";
+			break;
+
+			case "SCHOLASTIC, INC. - MATH SOLUTIONS":
+			shipping = "Scholastic Inc.";
+			break;
+
+			default:
+			var user = new GlideRecord("sys_user");
+			user.addQuery("name",company);
+			user.addNotNullQuery("name");
+			user.query();
+			if(user.next())
+				{
+				shipping = user.getDisplayValue("company");
+			}
+			else
+				{
+				shipping = "Scholastic Main";
+			}
+		}
+
+		//End of company
+
+
+
+		//Warranty Start and Expiration
+
+		var invoiceDate=source.u_invoice_date;
+		var date = new GlideDateTime(invoiceDate);
+		date.addYears(3);
+
+		var warrantyStart = new GlideDateTime(invoiceDate);
+
+		var od=source.u_order_date;
+		var oDate=new GlideDateTime(od);
+		var orderDate=new GlideDateTime();
+		orderDate.setDisplayValueInternal(oDate);
+
+		//Warranty Start and Expiration calculated
+	
+if(quantity<1)
+{
+}
+else
+	{
+		//Serial number check
+
+		if((sn == null || sn == '' || sn == "undefined") && modelC == "Computer")
+		{
+		}
+		else if(modelC == "Computer")
+		{
+				var alm = new GlideRecord("alm_hardware");
+				alm.addQuery('serial_number',sn);
+				alm.query();
+				if(alm.next() && alm.getRowCount()==1)
+				{
+					alm.setValue("asset_tag",assettag);
+					alm.setDisplayValue("company",shipping);
+					alm.setDisplayValue("model_category",modelC);
+					alm.setValue('model',model);
+					alm.setValue("cost",source.u_unit_price);
+					alm.setValue("vendor","ab4250a6878f9c005c6fdd2dff434db6");
+					//alm.setValue("install_status",1);
+					alm.setValue('u_warranty_start',warrantyStart);
+					alm.setValue('warranty_expiration',date);
+					alm.setValue('order_date',orderDate);
+					alm.setValue('u_item_class',source.u_item_class);
+					alm.setValue('u_item_group',source.u_item_group);
+					alm.setValue("comments",source.u_item_description);
+					alm.setValue('po_number',source.u_customer_purchase_order);
+					alm.setValue("invoice_number",source.u_invoice_nbr);
+					alm.setValue("location",locsys);
+					alm.update();
+				}
+				else
+				{
+					alm.initialize();
+					alm.setValue("asset_tag",assettag);
+					alm.setDisplayValue("company",shipping);
+					alm.setDisplayValue("model_category",modelC);
+					alm.setValue('model',model);
+					alm.setValue("cost",source.u_unit_price);
+					alm.setValue("vendor","ab4250a6878f9c005c6fdd2dff434db6");
+					alm.setValue("install_status",1);
+					alm.setValue('u_warranty_start',warrantyStart);
+					alm.setValue('warranty_expiration',date);
+					alm.setValue('order_date',orderDate);
+					alm.setValue('u_item_class',source.u_item_class);
+					alm.setValue('u_item_group',source.u_item_group);
+					alm.setValue("comments",source.u_item_description);
+					alm.setValue('po_number',source.u_customer_purchase_order);
+					alm.setValue("invoice_number",source.u_invoice_nbr);
+					alm.setValue("serial_number",sn);
+					alm.setValue("location",locsys);
+					alm.insert();
+				}
+		}
+		else
+		{
+// 			var alm = new GlideRecord(table);
+// 			alm.addQuery('serial_number',sn);
+// 			alm.query();
+// 			if(alm.next() && alm.getRowCount()==1)
+// 			{
+// 				alm.setValue("asset_tag",assettag);
+// 				alm.setDisplayValue("company",shipping);
+// 				alm.setDisplayValue("model_category",modelC);
+// 				alm.setValue('model',model);
+// 				alm.setValue("cost",source.u_unit_price);
+// 				alm.setValue("vendor","ab4250a6878f9c005c6fdd2dff434db6");
+// 				//alm.setValue("install_status",1);
+// 				alm.setValue('u_warranty_start',warrantyStart);
+// 				alm.setValue('warranty_expiration',date);
+// 				alm.setValue('order_date',orderDate);
+// 				alm.setValue('u_item_class',source.u_item_class);
+// 				alm.setValue('u_item_group',source.u_item_group);
+// 				alm.setValue("comments",source.u_item_description);
+// 				alm.setValue('po_number',source.u_customer_purchase_order);
+// 				alm.setValue("invoice_number",source.u_invoice_nbr);
+// 				alm.setValue("location",locsys);
+// 				alm.update();
+// 			}
+// 			else
+// 			{
+// 				alm.initialize();
+//				alm.setValue("asset_tag",assettag);
+// 				alm.setDisplayValue("company",shipping);
+// 				alm.setDisplayValue("model_category",modelC);
+// 				alm.setValue('model',model);
+// 				alm.setValue("cost",source.u_unit_price);
+// 				alm.setValue("vendor","ab4250a6878f9c005c6fdd2dff434db6");
+// 				alm.setValue("install_status",1);
+// 				alm.setValue('u_warranty_start',warrantyStart);
+// 				alm.setValue('warranty_expiration',date);
+// 				alm.setValue('order_date',orderDate);
+// 				alm.setValue('u_item_class',source.u_item_class);
+// 				alm.setValue('u_item_group',source.u_item_group);
+// 				alm.setValue("comments",source.u_item_description);
+// 				alm.setValue('po_number',source.u_customer_purchase_order);
+// 				alm.setValue("invoice_number",source.u_invoice_nbr);
+// 				alm.setValue("serial_number",sn);
+// 				alm.setValue("location",locsys);
+// 				alm.insert();
+// 			}
+		}
+	}
+//hr
+
+})(source, map, log, target);

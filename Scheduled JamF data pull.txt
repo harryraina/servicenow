@@ -1,0 +1,372 @@
+//Rest message to access the API
+gs.log("JAMF SCHEDULED IMPORT","testscript60");
+var r = new sn_ws.RESTMessageV2('JAMF computer and application info', 'Default GET');
+var response = r.execute();
+var responseBody = response.getBody();
+var httpStatus = response.getStatusCode();
+
+//Insert or Update CI records
+computerci(responseBody);
+
+// Insert or Update Software installations for CI's
+swinstallations(responseBody);
+
+//Update Chassis field for CI's
+updateci();
+
+
+//computerci function definition
+function computerci(rb){
+	try{
+		var xmlDoc = new XMLDocument2();
+		xmlDoc.parseXML(rb);
+		var hostList = xmlDoc.getNode('//computers');
+		
+		var iter = hostList.getChildNodeIterator();
+		while(iter.hasNext()){
+			var n = iter.next();
+			
+			var req = gs.xmlToJSON(n);
+			
+			var serial = req['computer'].Serial_Number;
+			serial=(serial==true)?"":serial;
+			
+			var Operating_System = req['computer'].Operating_System;
+			Operating_System=(Operating_System==true)?"":Operating_System;
+			
+			var Operating_System_Build = req['computer'].Operating_System_Build;
+			Operating_System_Build=(Operating_System_Build==true)?"":Operating_System_Build;
+			
+			var udid = req['computer'].udid;
+			udid=(udid==true)?"":udid;
+			
+			var Last_User = req['computer'].Last_User;
+			Last_User=(Last_User==true)?"":Last_User;
+			
+			var Last_Check_in = req['computer'].Last_Check_in;
+			Last_Check_in=(Last_Check_in==true)?"":Last_Check_in;
+			
+			var Architecture_Type = req['computer'].Architecture_Type;
+			Architecture_Type=(Architecture_Type==true)?"":Architecture_Type;
+			
+			var Make = req['computer'].Make;
+			Make=(Make==true)?"":Make;
+			
+			var Model_Identifier = req['computer'].Model_Identifier;
+			Model_Identifier=(Model_Identifier==true)?"":Model_Identifier;
+			
+			var department = req['computer'].Department;
+			department=(department==true)?"":department;
+			
+			var Computer_Name = req['computer'].Computer_Name;
+			Computer_Name=(Computer_Name==true)?"":Computer_Name;
+			
+			var Drive_Capacity_MB = req['computer'].Drive_Capacity_MB;
+			Drive_Capacity_MB=(Drive_Capacity_MB==true)?"":Drive_Capacity_MB;
+			
+			var Operating_System_Version = req['computer'].Operating_System_Version;
+			Operating_System_Version=(Operating_System_Version==true)?"":Operating_System_Version;
+			
+			var IP_Address = req['computer'].IP_Address;
+			IP_Address=(IP_Address==true)?"":IP_Address;
+			
+			var MAC_Address = req['computer'].MAC_Address;
+			MAC_Address=(MAC_Address==true)?"":MAC_Address;
+			
+			var Model = req['computer'].Model;
+			Model=(Model==true)?"":Model;
+			
+			var Number_of_Processors = req['computer'].Number_of_Processors;
+			
+			var Processor_Speed_MHz = req['computer'].Processor_Speed_MHz;
+			Processor_Speed_MHz=(Processor_Speed_MHz==true)?"":Processor_Speed_MHz;
+			
+			var Processor_Type = req['computer'].Processor_Type;
+			Processor_Type=(Processor_Type==true)?"":Processor_Type;
+			
+			var Total_RAM_MB = req['computer'].Total_RAM_MB;
+			Total_RAM_MB=(Total_RAM_MB==true)?"":Total_RAM_MB;
+			
+			var Current_AD_Domain = req['computer'].Current_AD_Domain;
+			Current_AD_Domain=(Current_AD_Domain==true)?"":Current_AD_Domain;
+			
+			//Add choice for os
+			var choice = new GlideRecord('sys_choice');
+			choice.addQuery('name','cmdb_ci_computer');
+			choice.addQuery('element','os');
+			choice.addQuery('language','en');
+			choice.addQuery('label',Operating_System);
+			choice.addQuery('value',Operating_System);
+			choice.query();
+			if(!choice.next())
+				{
+					choice.initialize();
+					choice.setValue('name','cmdb_ci_computer');
+					choice.setValue('element','os');
+					choice.setValue('language','en');
+					choice.setValue('label',Operating_System);
+					choice.setValue('value',Operating_System);
+					choice.insert();
+				}
+			
+			
+			// Find User Record
+			var user;
+			if(Last_User!="")
+				{
+					gs.log("inside user","testscript61");
+					var gr1 = new GlideRecord('sys_user');
+					gr1.addQuery('user_name',Last_User);
+					gr1.addNotNullQuery('user_name');
+					gr1.query();
+					if(gr1.next())
+						user=gr1.getValue('sys_id');
+				}
+			
+			
+			
+			// Find Product Model
+			var modelsys;
+			gs.log("inside product model","testscript62");
+			if(Model_Identifier!="" && Model_Identifier!=undefined)
+				{
+					var gr2 = new GlideRecord('cmdb_hardware_product_model');
+					gr2.addQuery('name',Model_Identifier);
+					gr2.addNotNullQuery('name');
+					gr2.query();
+					if(gr2.next())
+						modelsys=gr2.getValue('sys_id');
+					else
+					{
+						gr2.initialize();
+						gr2.setValue('name',Model_Identifier);
+						gr2.setValue('manufacturer','7c6f33400a0a3cde01b8505c2cc84dc5');
+						gr2.setValue('cmdb_model_category','81feb9c137101000deeabfc8bcbe5dc4');
+						modelsys=gr2.insert();
+					}
+				}
+			
+			
+			
+			// Find Department
+			var deptsys;
+			gs.log("inside department","testscript63");
+			if(department!="" && department!=undefined)
+				{
+					var gr3 = new GlideRecord('cmn_department');
+					gr3.addQuery('name',department);
+					gr3.addNotNullQuery('name');
+					gr3.query();
+					if(gr3.next())
+						deptsys=gr3.getValue('sys_id');
+					else
+					{
+						gr3.initialize();
+						gr3.setValue('name',department);
+						deptsys=gr3.insert();
+					}
+				}
+			
+			
+			
+			// Check for existing CI's
+			var cisys;
+			if(serial!="" && serial!=undefined)
+			{
+				gs.log("inside ci record","testscript64");
+				var gr = new GlideRecord('cmdb_ci_computer');
+				gr.addQuery('serial_number',serial);
+				gr.addNotNullQuery('serial_number');
+				gr.query();
+				if(gr.next() && gr.getRowCount()==1) // Existing CI with same serial number found
+				{
+				
+				//Update the existing CI record
+					gr.name.setDisplayValue(Computer_Name);
+					gr.disk_space.setDisplayValue(Drive_Capacity_MB);
+					gr.os.setDisplayValue(Operating_System);
+					gr.os_version.setDisplayValue(Operating_System_Version);
+					gr.ip_address.setDisplayValue(IP_Address);
+					gr.mac_address.setDisplayValue(MAC_Address);
+					gr.model_number.setDisplayValue(Model);
+					gr.cpu_count.setDisplayValue(Number_of_Processors);
+					gr.cpu_speed.setDisplayValue(Processor_Speed_MHz);
+					gr.cpu_type.setDisplayValue(Processor_Type);
+					gr.ram.setDisplayValue(Total_RAM_MB);
+					gr.os_domain.setDisplayValue(Current_AD_Domain);
+					gr.setValue('cpu_manufacturer','d7ebb909878928805c6fdd2dff434d7f');
+					gr.setValue('assigned_to',user);
+					gr.setValue('u_last_logged_on_user',user);
+					gr.setValue('model_id',modelsys);
+					gr.setValue('department',deptsys);
+					if(Make=='Apple')
+						gr.setValue('manufacturer','7c6f33400a0a3cde01b8505c2cc84dc5');
+					cisys=gr.update();
+				}
+				else
+				{
+					//Insert new CI record
+					gr.initialize();
+					gr.name.setDisplayValue(Computer_Name);
+					gr.serial_number.setDisplayValue(serial);
+					gr.disk_space.setDisplayValue(Drive_Capacity_MB);
+					gr.os.setDisplayValue(Operating_System);
+					gr.os_version.setDisplayValue(Operating_System_Version);
+					gr.ip_address.setDisplayValue(IP_Address);
+					gr.mac_address.setDisplayValue(MAC_Address);
+					gr.model_number.setDisplayValue(Model);
+					gr.cpu_count.setDisplayValue(Number_of_Processors);
+					gr.cpu_speed.setDisplayValue(Processor_Speed_MHz);
+					gr.cpu_type.setDisplayValue(Processor_Type);
+					gr.ram.setDisplayValue(Total_RAM_MB);
+					gr.os_domain.setDisplayValue(Current_AD_Domain);
+					gr.setValue('cpu_manufacturer','d7ebb909878928805c6fdd2dff434d7f');
+					gr.setValue('assigned_to',user);
+					gr.setValue('u_last_logged_on_user',user);
+					gr.setValue('model_id',modelsys);
+					gr.setValue('department',deptsys);
+					if(Make=='Apple')
+						gr.setValue('manufacturer','7c6f33400a0a3cde01b8505c2cc84dc5');
+					cisys=gr.insert();
+				
+				}
+			}
+			
+			
+			
+			//Insert or update record in Serial Number table
+			// 			var serialnum = new GlideRecord('cmdb_serial_number');
+			// 			serialnum.addQuery('serial_number',serial);
+			// 			serialnum.addNotNullQuery('serial_number');
+			// 			serialnum.query();
+			// 			if(serialnum.next())
+			// 				{}
+				// 			else
+				// 				{
+					// 					serialnum.initialize();
+					// 					serialnum.serial_number=serial;
+					// 					serialnum.serial_number_type='standard';
+					// 					serialnum.valid=true;
+					// 					serialnum.cmdb_ci=cisys;
+					// 					serialnum.insert();
+					// 				}
+				}
+			}
+			catch(ex) {
+				var message = ex.getMessage();
+			}
+		}
+
+
+		//swinstallations function definition
+		function swinstallations(resBody){
+			try{
+				var sn;
+				var sys;
+				
+				var xmlDoc = new XMLDocument2();
+				xmlDoc.parseXML(resBody);
+				
+				var computers = xmlDoc.getNode('//computers');
+				
+				var iter = computers.getChildNodeIterator();
+				while(iter.hasNext()){
+					try{
+						var d = iter.next();
+						var n = new XMLDocument2();
+						n.parseXML(d);
+						
+						//Get the Serial Number
+						sn = n.getNodeText('//Serial_Number');
+						
+						if(sn)
+							{
+								var gr = new GlideRecord("cmdb_ci_computer");
+								gr.addQuery('serial_number',sn);
+								gr.addNotNullQuery('serial_number');
+								gr.query();
+								if(gr.next() && gr.getRowCount()==1)
+								{
+									gs.log("inside software installations","testscript65");
+									sys=gr.sys_id;
+									
+									
+									var app = n.getNode('//Applications');
+									var it = app.getChildNodeIterator();
+									while(it.hasNext()){
+									var a = it.next();
+									var doc = new XMLDocument2();
+									doc.parseXML(a);
+									var app_title = doc.getNodeText('//Application_Title');
+									var app_version = doc.getNodeText('//Application_Version');
+							
+									//Update existing CI software installation
+									var gr1 = new GlideRecord('cmdb_sam_sw_install');
+									gr1.addQuery('installed_on',sys);
+									gr1.addQuery('display_name',app_title);
+									gr1.addQuery('version',app_version);
+									gr1.addNotNullQuery('installed_on');
+									gr1.addNotNullQuery('display_name');
+									gr1.addNotNullQuery('version');
+									gr1.query();
+									if(!gr1.next())
+									{
+										//Insert new CI software installation
+										gr1.initialize();
+										gr1.installed_on=sys;
+										gr1.display_name=app_title;
+										gr1.version=app_version;
+										gr1.insert();
+									}
+											
+									}
+								}	
+						
+						}
+					}
+					catch(e) {
+						var message = e.getMessage();
+					}
+					
+					
+				}
+			}
+			catch(ex) {
+				var message = ex.getMessage();
+			}
+		}
+		
+
+		////ciupdate function definition
+		function updateci(){
+			try{
+				gs.log("inside update chassis","testscript60");
+				var r = new sn_ws.RESTMessageV2('JAMF Chassis', 'Default GET');
+				var response = r.execute();
+				var responseBody = response.getBody();
+				var httpStatus = response.getStatusCode();
+				var parser = new JSONParser();
+				var parsedData = parser.parse(responseBody);
+				for(var i=0;i<parsedData.advanced_computer_search.computers.length;i++)
+					{
+						var sn = parsedData.advanced_computer_search.computers[i].Serial_Number;
+						var chassis = parsedData.advanced_computer_search.computers[i].CHASSIS;
+						if(sn)
+							{
+								var gr = new GlideRecord('cmdb_ci_computer');
+								gr.addQuery('serial_number',sn);
+								gr.addNotNullQuery('serial_number');
+								gr.query();
+								if(gr.next()&&gr.getRowCount()==1)
+									{
+										gs.log("inside ci record updating chassis","testscript66");
+										gr.chassis_type = chassis;
+										gr.update();
+									}
+							}
+					}
+			}
+			catch(e){
+				var message = e.getMessage();
+			}
+		}
